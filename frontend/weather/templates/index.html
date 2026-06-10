@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Weather Application</title>
+</head>
+<body>
+
+    <h1>Weather Application</h1>
+
+    <form method="POST">
+        {% csrf_token %}
+        <input type="text"
+               name="city"
+               placeholder="Enter City Name"
+               required>
+
+        <button type="submit">
+            Search
+        </button>
+    </form>
+
+</body>
+</html>
