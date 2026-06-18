@@ -11,47 +11,105 @@ def home(request):
 
     if request.method == "POST":
 
-        city = request.POST.get("city")
+        city = request.POST.get("city", "").strip()
 
-        geo = requests.get(
-            "https://geocoding-api.open-meteo.com/v1/search",
-            params={
-                "name": city,
-                "count": 1
-            }
-        ).json()
-
-        if "results" not in geo:
+        if not city:
 
             return render(
                 request,
                 "index.html",
                 {
-                    "error": "City not found"
+                    "error": "Please enter a city name."
                 }
             )
 
-        city_name = geo["results"][0]["name"]
-        state = geo["results"][0].get("admin1", "")
-        country = geo["results"][0].get("country", "")
+        try:
 
-        full_city = f"{city_name}, {state}, {country}"
+            geo_response = requests.get(
+                "https://geocoding-api.open-meteo.com/v1/search",
+                params={
+                    "name": city,
+                    "count": 1
+                },
+                timeout=5
+            )
 
-        response = requests.get(
-            FLASK_API,
-            params={
-                "city": city_name
-            }
-        )
+            geo = geo_response.json()
 
-        if response.status_code == 200:
+            if "results" not in geo:
 
-            weather = response.json()
+                return render(
+                    request,
+                    "index.html",
+                    {
+                        "error": "City not found."
+                    }
+                )
+
+            city_name = geo["results"][0]["name"]
+            state = geo["results"][0].get("admin1", "")
+            country = geo["results"][0].get("country", "")
+
+            full_city = f"{city_name}, {state}, {country}"
+
+            flask_response = requests.get(
+                FLASK_API,
+                params={
+                    "city": city_name
+                },
+                timeout=10
+            )
+
+            if flask_response.status_code != 200:
+
+                return render(
+                    request,
+                    "index.html",
+                    {
+                        "error": "Weather API returned an error."
+                    }
+                )
+
+            weather = flask_response.json()
 
             context = {
                 "city": full_city,
-                "weather": weather
+                "weather": weather,
+                "recommendation": weather.get(
+                    "ai_recommendation",
+                    "No recommendation available."
+                )
             }
+
+        except requests.exceptions.ConnectionError:
+
+            return render(
+                request,
+                "index.html",
+                {
+                    "error": "Backend Flask server is not running."
+                }
+            )
+
+        except requests.exceptions.Timeout:
+
+            return render(
+                request,
+                "index.html",
+                {
+                    "error": "Weather service timed out."
+                }
+            )
+
+        except Exception as e:
+
+            return render(
+                request,
+                "index.html",
+                {
+                    "error": str(e)
+                }
+            )
 
     return render(
         request,
@@ -62,40 +120,43 @@ def home(request):
 
 def autocomplete(request):
 
-    query = request.GET.get("query", "")
+    query = request.GET.get("query", "").strip()
 
     if len(query) < 2:
         return JsonResponse([], safe=False)
 
-    response = requests.get(
-        "https://geocoding-api.open-meteo.com/v1/search",
-        params={
-            "name": query,
-            "count": 10,
-            "language": "en"
-        }
-    )
+    try:
 
-    data = response.json()
+        response = requests.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+            params={
+                "name": query,
+                "count": 10,
+                "language": "en"
+            },
+            timeout=5
+        )
 
-    cities = []
+        data = response.json()
 
-    if "results" in data:
+        cities = []
 
-        for item in data["results"]:
+        if "results" in data:
 
-            feature = item.get("feature_code", "")
+            for item in data["results"]:
 
-            if feature in [
-                "PPLC",
-                "PPLA",
-                "PPLA2",
-                "PPLA3",
-                "PPLA4"
-            ]:
+                city_name = item.get("name")
 
-                cities.append(
-                    f"{item['name']}, {item.get('country','')}"
-                )
+                country = item.get("country", "")
 
-    return JsonResponse(cities, safe=False)
+                if city_name:
+
+                    cities.append(
+                        f"{city_name}, {country}"
+                    )
+
+        return JsonResponse(cities, safe=False)
+
+    except:
+
+        return JsonResponse([], safe=False)

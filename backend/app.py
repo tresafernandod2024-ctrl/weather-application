@@ -1,8 +1,11 @@
 from flask import Flask
 from flask import request
+
 from weather_service import get_weather_data
+from lyzr_service import get_ai_recommendation
 
 app = Flask(__name__)
+
 
 @app.route("/weather")
 def weather():
@@ -14,9 +17,24 @@ def weather():
             "error": "City Required"
         }
 
-    data = get_weather_data(city)
+    weather_data = get_weather_data(city)
 
-    return data
+    try:
+
+        recommendation = get_ai_recommendation(
+            weather_data
+        )
+
+        weather_data["ai_recommendation"] = recommendation
+
+    except Exception:
+
+        weather_data["ai_recommendation"] = (
+            "AI recommendation unavailable."
+        )
+
+    return weather_data
+
 
 if __name__ == "__main__":
     app.run(debug=True)
